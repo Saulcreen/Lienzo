@@ -368,22 +368,29 @@
     display:flex;
     justify-content:center;
     overflow: visible;
+    padding: 18px 0 60px;
   }
 
   .pages-wrapper{
     display:flex;
     flex-direction:column;
     align-items:center;
-    gap: 34px;
+    gap: 50px;
+    padding: 10px 0 40px;
     transform-origin: top center;
     counter-reset: pagecounter;
+    width: 100%;
   }
 
   .page{
     counter-increment: pagecounter;
     position:relative;
     width: 794px;
-    height: 1080px;
+    height: 1123px !important;
+    min-height: 1123px !important;
+    max-height: 1123px;
+    flex: 0 0 1123px;
+    box-sizing: border-box;
     background: var(--paper);
     border-radius: var(--radius);
     box-shadow: var(--shadow-paper);
@@ -465,7 +472,16 @@
 
   @media (max-width: 980px){
     .sidebar{ display:none; }
-    .page{ width: 100%; padding: 40px 26px; }
+    .page{
+      width: 794px;
+      height: 1123px !important;
+      min-height: 1123px !important;
+      padding: 40px 26px;
+    }
+    .pages-scroll{
+      overflow-x: auto;
+      justify-content: flex-start;
+    }
     .home-main{ padding: 30px 20px 60px; }
     .home-header{ padding: 20px; }
   }
@@ -880,46 +896,43 @@
     return page.innerText.trim() === '' && !page.querySelector('img, table');
   }
 
-  // Empuja el contenido que desborda una hoja hacia la siguiente, en cascada
+  // Distribuye el contenido entre hojas fijas.
+  // Las hojas nunca se eliminan automáticamente y siempre conservan
+  // su tamaño completo, incluso cuando se borra todo su contenido.
   function reflowFrom(startIndex){
     let pages = getPages();
-    let i = startIndex;
+    let i = Math.max(0, startIndex);
     let guard = 0;
 
-    while(i < pages.length && guard < 500){
+    while(i < pages.length && guard < 1500){
       guard++;
       const page = pages[i];
 
-      if(page.scrollHeight > page.clientHeight + PAGE_TOLERANCE && page.children.length > 1){
-        let nextPage = pages[i + 1];
-        if(!nextPage){
-          nextPage = createPageEl('<p><br></p>');
-          pagesWrapper.appendChild(nextPage);
-          pages = getPages();
-        }
-        // mueve el último bloque de esta hoja al inicio de la siguiente
-        const lastChild = page.lastElementChild;
-        if(lastChild){
-          nextPage.insertBefore(lastChild, nextPage.firstChild);
-        } else {
-          i++;
-        }
-        continue; // vuelve a comprobar la misma hoja por si sigue desbordada
+      if(page.scrollHeight <= page.clientHeight + PAGE_TOLERANCE){
+        i++;
+        continue;
       }
 
-      i++;
+      let nextPage = pages[i + 1];
+      if(!nextPage){
+        nextPage = createPageEl('<p><br></p>');
+        pagesWrapper.appendChild(nextPage);
+        pages = getPages();
+      }
+
+      const lastChild = page.lastElementChild;
+      if(!lastChild){
+        i++;
+        continue;
+      }
+
+      // Mueve el último bloque a la siguiente hoja y vuelve a comprobar.
+      nextPage.insertBefore(lastChild, nextPage.firstChild);
     }
 
-    // elimina hojas vacías al final (nunca la primera, y nunca la que se está editando)
-    pages = getPages();
-    for(let j = pages.length - 1; j > 0; j--){
-      const p = pages[j];
-      if(isPageEmpty(p) && document.activeElement !== p){
-        p.remove();
-      } else {
-        break;
-      }
-    }
+    // No se eliminan hojas vacías.
+    // Así cada hoja mantiene siempre el tamaño completo y el usuario
+    // puede seguir escribiendo en ella.
 
     updatePageCountFoot();
   }
