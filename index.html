@@ -363,13 +363,37 @@
 
   .paper-stage{ flex: 1; min-width: 0; display:flex; flex-direction: column; align-items:center; }
 
-  .paper{
-    position:relative; width: 100%; max-width: 760px; min-height: 640px;
-    background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow-paper);
-    padding: 68px 72px; font-family: 'Inter', sans-serif; font-size: 16px; line-height: 1.75;
-    color: var(--ink); outline: none; overflow-wrap: anywhere;
+  .pages-scroll{
+    width: 100%;
+    display:flex;
+    justify-content:center;
+    overflow: visible;
   }
-  .paper::before{
+
+  .pages-wrapper{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    gap: 34px;
+    transform-origin: top center;
+    counter-reset: pagecounter;
+  }
+
+  .page{
+    counter-increment: pagecounter;
+    position:relative;
+    width: 794px;
+    height: 1080px;
+    background: var(--paper);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow-paper);
+    padding: 68px 72px;
+    font-family: 'Inter', sans-serif; font-size: 16px; line-height: 1.75;
+    color: var(--ink); outline: none; overflow-wrap: anywhere;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+  .page:first-child::before{
     content:""; position:absolute; top:0; right:0; width: 130px; height: 130px;
     border-radius: 0 var(--radius) 0 100%;
     background:
@@ -377,13 +401,42 @@
       radial-gradient(circle at 70% 30%, rgba(201,191,232,0.5), transparent 55%);
     pointer-events:none;
   }
-  .paper h1{ font-size: 30px; font-weight: 600; margin-bottom: 6px; }
-  .paper h2{ font-size: 22px; font-weight: 600; margin: 22px 0 4px; }
-  .paper p{ margin: 0 0 14px; }
-  .paper:focus-visible{ box-shadow: var(--shadow-paper), 0 0 0 3px rgba(175,203,221,0.6); }
+  .page::after{
+    content: "Página " counter(pagecounter);
+    position:absolute;
+    bottom: 22px; left:0; right:0;
+    text-align:center;
+    font-size: 11px;
+    color: var(--ink-soft);
+    pointer-events:none;
+  }
+  .page h1{ font-size: 30px; font-weight: 600; margin-bottom: 6px; }
+  .page h2{ font-size: 22px; font-weight: 600; margin: 22px 0 4px; }
+  .page p{ margin: 0 0 14px; }
+  .page img{ max-width: 100%; height: auto; display:block; margin: 10px auto; border-radius: 4px; }
+  .page table{ max-width:100%; border-collapse: collapse; }
+  .page:focus-visible{ box-shadow: var(--shadow-paper), 0 0 0 3px rgba(175,203,221,0.6); }
+
+  .zoom-controls{
+    position: sticky;
+    top: 12px;
+    display:flex;
+    align-items:center;
+    gap: 6px;
+    background: rgba(255,255,255,0.86);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--line);
+    border-radius: 999px;
+    padding: 5px 6px 5px 14px;
+    margin: 0 auto 4px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    width: fit-content;
+  }
+  #zoomLevelLabel{ min-width: 38px; text-align:center; font-weight:600; color: var(--ink); }
 
   .paper-foot{
-    display:flex; justify-content:space-between; width:100%; max-width: 760px;
+    display:flex; justify-content:space-between; width:100%; max-width: 794px;
     margin-top: 10px; font-size: 12px; color: var(--ink-soft);
   }
 
@@ -412,7 +465,7 @@
 
   @media (max-width: 980px){
     .sidebar{ display:none; }
-    .paper{ padding: 40px 26px; }
+    .page{ width: 100%; padding: 40px 26px; }
     .home-main{ padding: 30px 20px 60px; }
     .home-header{ padding: 20px; }
   }
@@ -551,14 +604,29 @@
           </div>
         </div>
 
-        <div class="paper" id="editor" contenteditable="true">
-          <h1>Bienvenido a Lienzo</h1>
-          <p>Esto es un espacio de escritura tranquilo. Selecciona cualquier texto y usa la barra de arriba para darle formato — nada de menús escondidos ni paneles complicados.</p>
+        <div class="zoom-controls">
+          <span>Zoom</span>
+          <button class="ticon" id="zoomOutBtn" title="Alejar" style="width:24px;height:24px;">−</button>
+          <span id="zoomLevelLabel">100%</span>
+          <button class="ticon" id="zoomInBtn" title="Acercar" style="width:24px;height:24px;">+</button>
+          <span class="tdiv"></span>
+          <button class="ticon" id="addPageBtn" title="Agregar nueva hoja" style="width:24px;height:24px;">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+          </button>
+        </div>
+
+        <div class="pages-scroll" id="pagesScroll">
+          <div class="pages-wrapper" id="pagesWrapper">
+            <div class="page" contenteditable="true">
+              <h1>Bienvenido a Lienzo</h1>
+              <p>Esto es un espacio de escritura tranquilo. Selecciona cualquier texto y usa la barra de arriba para darle formato — nada de menús escondidos ni paneles complicados. Cuando una hoja se llena, la siguiente se crea automáticamente, igual que en Word.</p>
+            </div>
+          </div>
         </div>
 
         <div class="paper-foot">
           <span id="wordCount">0 palabras</span>
-          <span>Autoguardado activado</span>
+          <span id="pageCountFoot">1 hoja</span>
         </div>
       </div>
 
@@ -621,6 +689,11 @@
 
 <script>
   /* ============================================================
+     Configuración de páginas
+     ============================================================ */
+  const PAGE_TOLERANCE = 2; // px de margen para evitar bucles por redondeo
+
+  /* ============================================================
      Almacenamiento de documentos (pantalla principal)
      ============================================================ */
   const STORAGE_KEY = 'lienzo-documents';
@@ -628,7 +701,9 @@
 
   function loadDocs(){
     try{
-      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      const docs = JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+      // Compatibilidad con documentos guardados antes del sistema de páginas
+      return docs.map(d => d.pages ? d : { ...d, pages: [d.html || '<p></p>'] });
     }catch(e){ return []; }
   }
 
@@ -670,7 +745,7 @@
         <div class="doc-card-snippet">${escapeHtml(snippet)}</div>
         <div class="doc-card-meta">
           <span>${formatDate(doc.updated)}</span>
-          <span>${doc.words || 0} palabras</span>
+          <span>${doc.words || 0} palabras · ${(doc.pages || [1]).length} ${(doc.pages||[1]).length === 1 ? 'hoja' : 'hojas'}</span>
         </div>
       `;
       card.addEventListener('click', () => openDoc(doc.id));
@@ -700,7 +775,7 @@
     const doc = {
       id,
       title: 'Documento sin título',
-      html: '<h1>Documento sin título</h1><p>Empieza a escribir…</p>',
+      pages: ['<h1>Documento sin título</h1><p>Empieza a escribir…</p>'],
       text: 'Empieza a escribir…',
       words: 0,
       updated: Date.now()
@@ -716,9 +791,10 @@
     if(!doc) return;
     currentDocId = id;
     document.getElementById('docTitle').value = doc.title;
-    document.getElementById('editor').innerHTML = doc.html;
     document.title = doc.title + ' — Lienzo';
+    renderPages(doc.pages && doc.pages.length ? doc.pages : ['<p></p>']);
     showView('editorView');
+    setZoom(1);
     updateWordCount();
   }
 
@@ -727,10 +803,11 @@
     const docs = loadDocs();
     const idx = docs.findIndex(d => d.id === currentDocId);
     if(idx === -1) return;
+    const combinedText = getAllPagesText();
     docs[idx].title = document.getElementById('docTitle').value || 'Documento sin título';
-    docs[idx].html = editor.innerHTML;
-    docs[idx].text = editor.innerText;
-    docs[idx].words = countWords(editor.innerText);
+    docs[idx].pages = getAllPagesHtml();
+    docs[idx].text = combinedText;
+    docs[idx].words = countWords(combinedText);
     docs[idx].updated = Date.now();
     saveDocs(docs);
   }
@@ -753,15 +830,154 @@
   });
 
   /* ============================================================
-     Editor
+     Páginas — creación, medición y reflujo automático (estilo Word)
      ============================================================ */
-  const editor = document.getElementById('editor');
+  const pagesWrapper = document.getElementById('pagesWrapper');
   const statusText = document.getElementById('statusText');
   const wordCount = document.getElementById('wordCount');
+  const pageCountFoot = document.getElementById('pageCountFoot');
 
+  function getPages(){
+    return Array.from(pagesWrapper.querySelectorAll('.page'));
+  }
+
+  function createPageEl(html){
+    const page = document.createElement('div');
+    page.className = 'page';
+    page.contentEditable = 'true';
+    page.innerHTML = html || '<p><br></p>';
+    attachPageListeners(page);
+    return page;
+  }
+
+  function attachPageListeners(page){
+    page.addEventListener('input', () => onAnyPageInput());
+    page.addEventListener('focus', refreshToolbarState);
+  }
+
+  function renderPages(pagesHtmlArray){
+    pagesWrapper.innerHTML = '';
+    pagesHtmlArray.forEach(html => pagesWrapper.appendChild(createPageEl(html)));
+    // corrige cualquier desbordamiento heredado (por ejemplo, contenido importado)
+    reflowFrom(0);
+    updatePageCountFoot();
+  }
+
+  function getAllPagesHtml(){
+    return getPages().map(p => p.innerHTML);
+  }
+
+  function getAllPagesText(){
+    return getPages().map(p => p.innerText).join('\n\n');
+  }
+
+  function updatePageCountFoot(){
+    const n = getPages().length;
+    pageCountFoot.textContent = n + (n === 1 ? ' hoja' : ' hojas');
+  }
+
+  function isPageEmpty(page){
+    return page.innerText.trim() === '' && !page.querySelector('img, table');
+  }
+
+  // Empuja el contenido que desborda una hoja hacia la siguiente, en cascada
+  function reflowFrom(startIndex){
+    let pages = getPages();
+    let i = startIndex;
+    let guard = 0;
+
+    while(i < pages.length && guard < 500){
+      guard++;
+      const page = pages[i];
+
+      if(page.scrollHeight > page.clientHeight + PAGE_TOLERANCE && page.children.length > 1){
+        let nextPage = pages[i + 1];
+        if(!nextPage){
+          nextPage = createPageEl('<p><br></p>');
+          pagesWrapper.appendChild(nextPage);
+          pages = getPages();
+        }
+        // mueve el último bloque de esta hoja al inicio de la siguiente
+        const lastChild = page.lastElementChild;
+        if(lastChild){
+          nextPage.insertBefore(lastChild, nextPage.firstChild);
+        } else {
+          i++;
+        }
+        continue; // vuelve a comprobar la misma hoja por si sigue desbordada
+      }
+
+      i++;
+    }
+
+    // elimina hojas vacías al final (nunca la primera, y nunca la que se está editando)
+    pages = getPages();
+    for(let j = pages.length - 1; j > 0; j--){
+      const p = pages[j];
+      if(isPageEmpty(p) && document.activeElement !== p){
+        p.remove();
+      } else {
+        break;
+      }
+    }
+
+    updatePageCountFoot();
+  }
+
+  function onAnyPageInput(){
+    const active = document.activeElement;
+    const pages = getPages();
+    const idx = pages.indexOf(active);
+    reflowFrom(idx === -1 ? 0 : idx);
+    updateWordCount();
+    statusText.textContent = 'Editando…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      persistCurrentDoc();
+      statusText.textContent = 'Guardado';
+    }, 700);
+  }
+
+  document.getElementById('addPageBtn').addEventListener('click', () => {
+    const page = createPageEl('<p><br></p>');
+    pagesWrapper.appendChild(page);
+    updatePageCountFoot();
+    page.focus();
+  });
+
+  /* ============================================================
+     Zoom — Ctrl + rueda del mouse escala las hojas, no la página del navegador
+     ============================================================ */
+  let zoomLevel = 1;
+  const pagesScroll = document.getElementById('pagesScroll');
+  const zoomLevelLabel = document.getElementById('zoomLevelLabel');
+
+  function setZoom(level){
+    zoomLevel = Math.min(2, Math.max(0.4, level));
+    pagesWrapper.style.transform = `scale(${zoomLevel})`;
+    // reserva el espacio real que ocupa la hoja escalada para que el layout no se rompa
+    pagesWrapper.style.marginBottom = (zoomLevel > 1 ? (zoomLevel - 1) * 600 : 0) + 'px';
+    zoomLevelLabel.textContent = Math.round(zoomLevel * 100) + '%';
+  }
+
+  pagesScroll.addEventListener('wheel', (e) => {
+    if(!e.ctrlKey) return;
+    e.preventDefault(); // evita que el navegador haga zoom de toda la página
+    const delta = e.deltaY > 0 ? -0.08 : 0.08;
+    setZoom(zoomLevel + delta);
+  }, { passive: false });
+
+  document.getElementById('zoomInBtn').addEventListener('click', () => setZoom(zoomLevel + 0.1));
+  document.getElementById('zoomOutBtn').addEventListener('click', () => setZoom(zoomLevel - 0.1));
+
+  /* ============================================================
+     Barra de herramientas
+     ============================================================ */
   function exec(cmd, value = null){
     document.execCommand(cmd, false, value);
-    editor.focus();
+    if(document.activeElement && document.activeElement.classList.contains('page')){
+      document.activeElement.focus();
+    }
     refreshToolbarState();
   }
 
@@ -786,26 +1002,17 @@
   }
 
   document.addEventListener('selectionchange', () => {
-    if (document.activeElement === editor || editor.contains(document.activeElement)) {
+    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('page')) {
       refreshToolbarState();
     }
   });
 
   function updateWordCount(){
-    const n = countWords(editor.innerText);
+    const n = countWords(getAllPagesText());
     wordCount.textContent = n + (n === 1 ? ' palabra' : ' palabras');
   }
 
   let saveTimer;
-  editor.addEventListener('input', () => {
-    updateWordCount();
-    statusText.textContent = 'Editando…';
-    clearTimeout(saveTimer);
-    saveTimer = setTimeout(() => {
-      persistCurrentDoc();
-      statusText.textContent = 'Guardado';
-    }, 700);
-  });
 
   document.getElementById('docTitle').addEventListener('input', e => {
     document.title = e.target.value + ' — Lienzo';
@@ -819,13 +1026,14 @@
   /* Export */
   document.getElementById('exportHtml').addEventListener('click', () => {
     const title = document.getElementById('docTitle').value || 'documento';
-    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title></head><body>${editor.innerHTML}</body></html>`;
+    const pagesHtml = getAllPagesHtml().map(h => `<section style="max-width:700px;margin:0 auto 60px;">${h}</section>`).join('');
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title></head><body>${pagesHtml}</body></html>`;
     downloadBlob(html, title + '.html', 'text/html');
   });
 
   document.getElementById('exportTxt').addEventListener('click', () => {
     const title = document.getElementById('docTitle').value || 'documento';
-    downloadBlob(editor.innerText, title + '.txt', 'text/plain');
+    downloadBlob(getAllPagesText(), title + '.txt', 'text/plain');
   });
 
   function downloadBlob(content, filename, type){
@@ -886,7 +1094,13 @@
     });
   }
 
-  /* Abrir archivo dentro del editor (reemplaza el documento actual) */
+  // Divide un bloque de HTML importado en varias hojas, respetando el tamaño de página
+  function splitHtmlIntoPages(html){
+    renderPages([html]); // arranca con todo en la hoja 1; reflowFrom lo reparte en cascada
+    return getAllPagesHtml();
+  }
+
+  /* Abrir archivo dentro del editor (reemplaza el documento actual, dividido en hojas) */
   const fileInput = document.getElementById('fileInput');
   document.getElementById('openBtn').addEventListener('click', () => fileInput.click());
   fileInput.addEventListener('change', () => {
@@ -894,7 +1108,7 @@
     if(!file) return;
     statusText.textContent = 'Importando…';
     importFile(file).then(({ title, html }) => {
-      editor.innerHTML = html;
+      splitHtmlIntoPages(html);
       document.getElementById('docTitle').value = title;
       updateWordCount();
       persistCurrentDoc();
@@ -906,7 +1120,7 @@
     fileInput.value = '';
   });
 
-  /* Subir archivo(s) desde la pantalla principal — cada uno crea un documento nuevo */
+  /* Subir archivo(s) desde la pantalla principal — cada uno crea un documento nuevo, dividido en hojas */
   const homeFileInput = document.getElementById('homeFileInput');
   document.getElementById('homeUploadBtn').addEventListener('click', () => homeFileInput.click());
   homeFileInput.addEventListener('change', () => {
@@ -926,14 +1140,14 @@
       results.forEach((res, i) => {
         if(res.status === 'fulfilled'){
           const { title, html } = res.value;
+          const pagesHtml = splitHtmlIntoPages(html);
           const id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = html;
+          const fullText = getAllPagesText();
           docs.push({
             id, title,
-            html,
-            text: tempDiv.innerText,
-            words: countWords(tempDiv.innerText),
+            pages: pagesHtml,
+            text: fullText,
+            words: countWords(fullText),
             updated: Date.now() + i
           });
           lastId = id;
