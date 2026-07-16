@@ -896,19 +896,162 @@
     return page.innerText.trim() === '' && !page.querySelector('img, table');
   }
 
+  function pageFits(page){
+    return page.scrollHeight <= page.clientHeight + PAGE_TOLERANCE;
+  }
+
+  const SPLITTABLE_TEXT_TAGS = ['P','LI','H1','H2','H3','H4','H5','H6','BLOCKQUOTE','DIV'];
+
+  // Intenta partir un bloque de texto (párrafo, item de lista, encabezado…) en dos:
+  // la parte que sí cabe se queda en la hoja actual y el resto se devuelve como
+  // un nuevo elemento para continuar en la siguiente hoja. Usa la propia hoja en
+  // pantalla para medir, así el resultado siempre coincide con lo que se ve.
+  function splitTextBlockToFit(page, block){
+    const originalHTML = block.innerHTML;
+    const words = (block.textContent || '').split(/(\s+)/).filter(w => w !== '');
+    if(!words.length) return { remainder: null };
+
+    let lo = 0, hi = words.length, best = 0;
+    while(lo <= hi){
+      const mid = Math.floor((lo + hi) / 2);
+      block.textContent = words.slice(0, mid).join('');
+      if(pageFits(page)){
+        best = mid;
+        lo = mid + 1;
+      } else {
+        hi = mid - 1;
+      }
+    }
+
+    if(best >= words.length){
+      // En realidad sí cabe entero — se restaura el formato original.
+      block.innerHTML = originalHTML;
+      return { remainder: null };
+    }
+
+    if(best === 0){
+      // Ni una sola palabra cabe en el espacio restante de esta hoja.
+      block.innerHTML = originalHTML;
+      return { remainder: null, unsplittable: true };
+    }
+
+    block.textContent = words.slice(0, best).join('');
+    const remainder = document.createElement(block.tagName);
+    if(block.className) remainder.className = block.className;
+    remainder.textContent = words.slice(best).join('');
+    return { remainder };
+  }
+
+  // Intenta partir una tabla por filas: las filas que caben se quedan,
+  // el resto continúa en una tabla nueva en la siguiente hoja.
+  function splitTableToFit(page, table){
+    const tbody = table.tBodies[0] || table;
+    const rows = Array.from(tbody.rows);
+    if(rows.length <= 1) return { remainder: null, unsplittable: true };
+
+    const removedRows = [];
+    while(rows.length - removedRows.length > 1 && !pageFits(page)){
+      const row = rows[rows.length - 1 - removedRows.length];
+      tbody.removeChild(row);
+      removedRows.unshift(row);
+    }
+
+    if(!pageFits(page)){
+      // Ni con una sola fila cabe — se devuelven las filas quitadas y se marca sin resolver.
+      removedRows.forEach(r => tbody.appendChild(r));
+      return { remainder: null, unsplittable: true };
+    }
+
+    if(!removedRows.length) return { remainder: null };
+
+    const remainderTable = document.createElement('table');
+    remainderTable.className = table.className;
+    const remainderBody = document.createElement('tbody');
+    removedRows.forEach(r => remainderBody.appendChild(r));
+    remainderTable.appendChild(remainderBody);
+    return { remainder: remainderTable };
+  }
+
+  // Reduce una imagen para que quepa entera en una hoja vacía, en vez de
+  // dejarla cortada por el borde inferior.
+  function shrinkImageToFit(page, img){
+    const available = Math.max(120, page.clientHeight - 4);
+    img.style.maxHeight = available + 'px';
+    img.style.width = 'auto';
+    img.style.maxWidth = '100%';
+    return pageFits(page);
+  }
+
+  // Intenta partir el único bloque de una hoja que, por sí solo, ya no cabe.
+  // Devuelve el elemento restante (para la siguiente hoja) o null si no se pudo dividir.
+  function trySplitOversizedBlock(page, block){
+    if(block.tagName === 'TABLE'){
+      return splitTableToFit(page, block);
+    }
+    if(block.tagName === 'IMG'){
+      const fits = shrinkImageToFit(page, block);
+      return { remainder: null, unsplittable: !fits };
+    }
+    const singleImg = block.children.length === 1 && block.firstElementChild.tagName === 'IMG'
+      ? block.firstElementChild : null;
+    if(singleImg){
+      const fits = shrinkImageToFit(page, singleImg);
+      return { remainder: null, unsplittable: !fits };
+    }
+    if(SPLITTABLE_TEXT_TAGS.includes(block.tagName)){
+      return splitTextBlockToFit(page, block);
+    }
+    return { remainder: null, unsplittable: true };
+  }
+
   // Distribuye el contenido entre hojas fijas.
   // Las hojas nunca se eliminan automáticamente y siempre conservan
   // su tamaño completo, incluso cuando se borra todo su contenido.
+  // Si un solo bloque (un párrafo muy largo, una tabla, una imagen) es más
+  // grande que una hoja entera, se divide en vez de dejarlo cortado.
   function reflowFrom(startIndex){
     let pages = getPages();
     let i = Math.max(0, startIndex);
     let guard = 0;
+    const guardLimit = Math.max(3000, pages.length * 200);
 
-    while(i < pages.length && guard < 1500){
+    while(i < pages.length && guard < guardLimit){
       guard++;
       const page = pages[i];
 
-      if(page.scrollHeight <= page.clientHeight + PAGE_TOLERANCE){
+      if(pageFits(page)){
+        i++;
+        continue;
+      }
+
+      const lastChild = page.lastElementChild;
+      if(!lastChild){
+        i++;
+        continue;
+      }
+
+      // La hoja tiene un único bloque y aun así no cabe: hay que dividirlo
+      // en el propio lugar en vez de moverlo (moverlo entero solo trasladaría
+      // el problema, sin resolverlo nunca).
+      if(page.children.length === 1){
+        const result = trySplitOversizedBlock(page, lastChild);
+        if(result.remainder){
+          let nextPage = pages[i + 1];
+          if(!nextPage){
+            nextPage = createPageEl('<p><br></p>');
+            pagesWrapper.appendChild(nextPage);
+            pages = getPages();
+          }
+          // Si la hoja siguiente es un párrafo vacío recién creado, se reemplaza
+          // por el contenido real en vez de dejarlo como línea suelta.
+          if(nextPage.children.length === 1 && isPageEmpty(nextPage)){
+            nextPage.innerHTML = '';
+          }
+          nextPage.insertBefore(result.remainder, nextPage.firstChild);
+          continue; // vuelve a comprobar la misma hoja por si aún sobra algo
+        }
+        // No se pudo dividir (imagen ya reducida al máximo, tabla de una sola
+        // fila gigante, etc.): se deja como está para no quedar en bucle.
         i++;
         continue;
       }
@@ -918,12 +1061,6 @@
         nextPage = createPageEl('<p><br></p>');
         pagesWrapper.appendChild(nextPage);
         pages = getPages();
-      }
-
-      const lastChild = page.lastElementChild;
-      if(!lastChild){
-        i++;
-        continue;
       }
 
       // Mueve el último bloque a la siguiente hoja y vuelve a comprobar.
@@ -1125,7 +1262,9 @@
       document.getElementById('docTitle').value = title;
       updateWordCount();
       persistCurrentDoc();
-      statusText.textContent = 'Guardado';
+      const n = getPages().length;
+      statusText.textContent = 'Importado: ' + n + (n === 1 ? ' página' : ' páginas');
+      setTimeout(() => { statusText.textContent = 'Guardado'; }, 2200);
     }).catch(err => {
       statusText.textContent = 'Guardado';
       alert(err.message || 'No se pudo importar el archivo.');
