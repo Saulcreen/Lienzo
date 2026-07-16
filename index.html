@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lienzo — tus documentos</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
+<style>
+  :root{
+    /* editor (color) tokens */
+    --bg: #F4F1FA;
+    --paper: #FFFFFF;
+    --paper-edge: #EFEAF8;
+    --ink: #37324A;
+    --ink-soft: #6E6884;
+    --line: #E6E1F2;
+
+    --sage: #A6BFA4;
+    --sage-deep: #7E9C7B;
+    --sky: #AFCBDD;
+    --sky-deep: #6FA0BB;
+    --blush: #E9BFC2;
+    --blush-deep: #D48F94;
+    --lav: #C9BFE8;
+    --lav-deep: #9C8CD4;
+    --sand: #E7D3AE;
+
+    /* home (black & white) tokens */
+    --bw-bg: #FFFFFF;
+    --bw-surface: #FFFFFF;
+    --bw-ink: #121114;
+    --bw-ink-soft: #706F76;
+    --bw-line: #E2E1E4;
+    --bw-line-strong: #121114;
+    --bw-hover: #F4F3F5;
+
+    --radius: 14px;
+    --shadow-paper: 0 1px 2px rgba(55,50,74,0.04), 0 20px 40px -20px rgba(55,50,74,0.18);
+  }
+
+  *{ box-sizing: border-box; }
+
+  html,body{
+    margin:0; padding:0;
+    height:100%;
+    font-family: 'Inter', sans-serif;
+  }
+
+  ::selection{ background: var(--lav); color: var(--ink); }
+  h1,h2,h3{ font-family:'Fraunces', serif; margin:0; }
+
+  .view{ display:none; min-height:100vh; }
+  .view.active{ display:block; }
+
+  /* =========================================================
+     HOME VIEW — black & white
+     ========================================================= */
+  #homeView{
+    background: var(--bw-bg);
+    color: var(--bw-ink);
+  }
+
+  .home-header{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 26px 40px;
+    border-bottom: 1px solid var(--bw-line);
+  }
+
+  .bw-brand{ display:flex; align-items:center; gap:12px; }
+  .bw-mark{
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    background: var(--bw-ink);
+    position:relative;
+  }
+  .bw-mark::after{
+    content:"";
+    position:absolute;
+    inset: 8px;
+    border: 1.5px solid #fff;
+    border-radius: 3px;
+  }
+  .bw-brand-name{
+    font-family:'Fraunces', serif;
+    font-size: 20px;
+    font-weight: 600;
+    letter-spacing: 0.2px;
+  }
+
+  .bw-btn{
+    font-family:'Inter', sans-serif;
+    font-size: 13px;
+    font-weight: 600;
+    padding: 10px 18px;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: transform .12s ease, opacity .12s ease;
+    border: 1px solid var(--bw-line-strong);
+    background: var(--bw-ink);
+    color: #fff;
+  }
+  .bw-btn:hover{ opacity:.82; }
+  .bw-btn:active{ transform: scale(0.97); }
+
+  .bw-btn.ghost{
+    background: transparent;
+    color: var(--bw-ink);
+  }
+  .bw-btn.ghost:hover{ background: var(--bw-hover); }
+
+  .home-main{
+    max-width: 1080px;
+    margin: 0 auto;
+    padding: 44px 40px 80px;
+  }
+
+  .home-title{ font-size: 30px; font-weight: 600; margin-bottom: 6px; }
+  .home-sub{ color: var(--bw-ink-soft); font-size: 14px; margin-bottom: 34px; }
+
+  .doc-grid{
+    display:grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 18px;
+  }
+
+  .doc-card{
+    border: 1px solid var(--bw-line);
+    border-radius: 12px;
+    padding: 18px;
+    background: var(--bw-surface);
+    cursor: pointer;
+    display:flex;
+    flex-direction: column;
+    min-height: 168px;
+    transition: border-color .12s ease, transform .12s ease;
+    position: relative;
+  }
+  .doc-card:hover{ border-color: var(--bw-line-strong); transform: translateY(-2px); }
+
+  .doc-card.new{
+    align-items:center;
+    justify-content:center;
+    border-style: dashed;
+    color: var(--bw-ink-soft);
+    gap: 10px;
+  }
+  .doc-card.new:hover{ color: var(--bw-ink); }
+  .new-icon{
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1.5px solid currentColor;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 18px;
+    line-height: 1;
+  }
+  .new-label{ font-size: 13px; font-weight: 600; }
+
+  .doc-icon{
+    width: 30px; height: 38px;
+    border: 1.5px solid var(--bw-ink);
+    border-radius: 3px;
+    margin-bottom: 14px;
+    position: relative;
+  }
+  .doc-icon::before, .doc-icon::after{
+    content:"";
+    position:absolute;
+    left: 6px; right: 6px;
+    height: 1.5px;
+    background: var(--bw-ink-soft);
+  }
+  .doc-icon::before{ top: 12px; }
+  .doc-icon::after{ top: 20px; }
+
+  .doc-card-title{
+    font-family:'Fraunces', serif;
+    font-weight: 600;
+    font-size: 15px;
+    margin-bottom: 6px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .doc-card-snippet{
+    font-size: 12.5px;
+    color: var(--bw-ink-soft);
+    line-height: 1.5;
+    flex:1;
+    overflow: hidden;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+  }
+
+  .doc-card-meta{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top: 12px;
+    font-size: 11px;
+    color: var(--bw-ink-soft);
+    border-top: 1px solid var(--bw-line);
+    padding-top: 10px;
+  }
+
+  .doc-delete{
+    position:absolute;
+    top: 12px; right: 12px;
+    width: 22px; height: 22px;
+    border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    background: transparent;
+    border: 1px solid transparent;
+    color: var(--bw-ink-soft);
+    opacity: 0;
+    transition: opacity .12s ease;
+  }
+  .doc-card:hover .doc-delete{ opacity: 1; }
+  .doc-delete:hover{ border-color: var(--bw-line-strong); color: var(--bw-ink); }
+  .doc-delete svg{ width: 12px; height:12px; }
+
+  .empty-state{
+    border: 1px dashed var(--bw-line);
+    border-radius: 14px;
+    padding: 60px 30px;
+    text-align:center;
+    color: var(--bw-ink-soft);
+  }
+  .empty-state .home-title{ font-size:20px; margin-bottom:8px; }
+
+  /* =========================================================
+     EDITOR VIEW — soft color
+     ========================================================= */
+  #editorView{
+    background: var(--bg);
+    color: var(--ink);
+    background-image:
+      radial-gradient(circle at 8% 0%, rgba(175,203,221,0.35), transparent 40%),
+      radial-gradient(circle at 100% 8%, rgba(201,191,232,0.35), transparent 38%);
+    background-attachment: fixed;
+  }
+
+  .topbar{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    padding: 16px 28px;
+    gap: 20px;
+  }
+
+  .brand{ display:flex; align-items:center; gap:10px; }
+  .back-btn{
+    width: 34px; height: 34px;
+    border-radius: 50%;
+    border: 1px solid var(--line);
+    background: rgba(255,255,255,0.7);
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer;
+    color: var(--ink);
+    flex-shrink:0;
+  }
+  .back-btn:hover{ background: var(--paper); }
+  .back-btn svg{ width:16px; height:16px; }
+
+  .brand-mark{
+    width: 30px; height: 30px;
+    border-radius: 9px;
+    background: linear-gradient(135deg, var(--sky) 0%, var(--lav) 55%, var(--blush) 100%);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.6);
+  }
+  .brand-name{ font-family:'Fraunces', serif; font-size: 19px; font-weight: 600; letter-spacing: 0.2px; }
+
+  .doc-title-wrap{ flex:1; display:flex; justify-content:center; }
+  #docTitle{
+    font-family:'Fraunces', serif;
+    font-size: 16px; font-weight: 500; color: var(--ink);
+    background: transparent; border: 1px solid transparent;
+    border-radius: 8px; padding: 6px 12px; text-align:center;
+    min-width: 220px; outline:none;
+  }
+  #docTitle:hover{ background: rgba(255,255,255,0.6); }
+  #docTitle:focus{ background: var(--paper); border-color: var(--line); }
+
+  .status{ font-size: 12px; color: var(--ink-soft); margin-left: 8px; }
+
+  .topbar-right{ display:flex; align-items:center; gap: 14px; }
+
+  .avatars{ display:flex; }
+  .avatar{
+    width: 30px; height:30px; border-radius: 50%;
+    display:flex; align-items:center; justify-content:center;
+    font-size: 12px; font-weight:600; color:#fff;
+    border: 2px solid var(--bg); margin-left: -8px;
+  }
+  .avatar:first-child{ margin-left:0; }
+  .a1{ background: var(--sage-deep); }
+  .a2{ background: var(--sky-deep); }
+  .a3{ background: var(--lav-deep); }
+  .avatar.add{
+    background: var(--paper); color: var(--ink-soft);
+    border: 2px dashed var(--line); cursor:pointer; font-size: 15px;
+  }
+
+  .btn{
+    font-family:'Inter', sans-serif; font-size: 13px; font-weight: 600;
+    padding: 9px 16px; border-radius: 999px; border: none; cursor: pointer;
+    transition: transform .12s ease, box-shadow .12s ease;
+  }
+  .btn:active{ transform: scale(0.97); }
+  .btn-primary{ background: var(--ink); color: #fff; }
+  .btn-primary:hover{ box-shadow: 0 6px 16px -6px rgba(55,50,74,0.5); }
+  .btn-ghost{ background: transparent; color: var(--ink); border: 1px solid var(--line); }
+  .btn-ghost:hover{ background: rgba(255,255,255,0.7); }
+
+  .layout{
+    display:flex; gap: 24px; padding: 8px 28px 48px;
+    max-width: 1180px; margin: 0 auto; align-items:flex-start;
+  }
+
+  .toolbar{
+    position: sticky; top: 12px; z-index: 5;
+    display:flex; flex-wrap:wrap; align-items:center; gap: 4px;
+    background: rgba(255,255,255,0.86); backdrop-filter: blur(10px);
+    border: 1px solid var(--line); border-radius: 999px; padding: 7px 10px;
+    margin: 10px auto 22px; box-shadow: 0 10px 30px -18px rgba(55,50,74,0.35);
+    width: fit-content;
+  }
+
+  .tgroup{ display:flex; align-items:center; gap: 2px; padding: 0 6px; }
+  .tdiv{ width: 1px; height: 22px; background: var(--line); margin: 0 2px; }
+
+  .ticon{
+    width: 32px; height:32px; display:flex; align-items:center; justify-content:center;
+    border-radius: 8px; border: none; background: transparent; color: var(--ink); cursor:pointer;
+  }
+  .ticon:hover{ background: var(--paper-edge); }
+  .ticon.active{ background: var(--lav); color: var(--ink); }
+  .ticon svg{ width:16px; height:16px; }
+
+  select.tselect{
+    height: 32px; border-radius: 8px; border: 1px solid transparent; background: transparent;
+    font-family:'Inter', sans-serif; font-size: 13px; color: var(--ink); padding: 0 6px; cursor:pointer;
+  }
+  select.tselect:hover{ background: var(--paper-edge); }
+  #fontFamily{ width: 132px; }
+  #fontSize{ width: 62px; }
+
+  .swatches{ display:flex; gap: 6px; padding: 0 4px; }
+  .swatch{ width: 18px; height: 18px; border-radius: 50%; border: 2px solid #fff; box-shadow: 0 0 0 1px var(--line); cursor: pointer; }
+  .swatch:hover{ transform: scale(1.15); }
+  .sw-ink{ background: var(--ink); }
+  .sw-sage{ background: var(--sage-deep); }
+  .sw-sky{ background: var(--sky-deep); }
+  .sw-blush{ background: var(--blush-deep); }
+  .sw-lav{ background: var(--lav-deep); }
+  .sw-sand{ background: var(--sand); }
+
+  .paper-stage{ flex: 1; min-width: 0; display:flex; flex-direction: column; align-items:center; }
+
+  .paper{
+    position:relative; width: 100%; max-width: 760px; min-height: 640px;
+    background: var(--paper); border-radius: var(--radius); box-shadow: var(--shadow-paper);
+    padding: 68px 72px; font-family: 'Inter', sans-serif; font-size: 16px; line-height: 1.75;
+    color: var(--ink); outline: none; overflow-wrap: anywhere;
+  }
+  .paper::before{
+    content:""; position:absolute; top:0; right:0; width: 130px; height: 130px;
+    border-radius: 0 var(--radius) 0 100%;
+    background:
+      radial-gradient(circle at 100% 0%, rgba(233,191,194,0.55), transparent 60%),
+      radial-gradient(circle at 70% 30%, rgba(201,191,232,0.5), transparent 55%);
+    pointer-events:none;
+  }
+  .paper h1{ font-size: 30px; font-weight: 600; margin-bottom: 6px; }
+  .paper h2{ font-size: 22px; font-weight: 600; margin: 22px 0 4px; }
+  .paper p{ margin: 0 0 14px; }
+  .paper:focus-visible{ box-shadow: var(--shadow-paper), 0 0 0 3px rgba(175,203,221,0.6); }
+
+  .paper-foot{
+    display:flex; justify-content:space-between; width:100%; max-width: 760px;
+    margin-top: 10px; font-size: 12px; color: var(--ink-soft);
+  }
+
+  .sidebar{ width: 250px; flex-shrink:0; display:flex; flex-direction:column; gap: 16px; position: sticky; top: 12px; }
+  .card{ background: var(--paper); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .card h3{ font-size: 13px; font-weight: 600; color: var(--ink-soft); text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 12px; }
+
+  .collab-row{ display:flex; align-items:center; gap: 10px; margin-bottom: 12px; font-size: 13px; }
+  .collab-row:last-child{ margin-bottom:0; }
+  .dot{ width:7px; height:7px; border-radius:50%; background: var(--sage-deep); flex-shrink:0; }
+  .dot.away{ background: var(--sand); }
+  .collab-name{ font-weight:500; }
+  .collab-cursor{ margin-left:auto; width: 12px; height: 12px; border-radius: 3px; }
+
+  .roadmap-item{ display:flex; align-items:flex-start; gap: 10px; font-size: 13px; color: var(--ink); margin-bottom: 12px; line-height: 1.4; }
+  .roadmap-item:last-child{ margin-bottom:0; }
+  .check{ width: 16px; height:16px; border-radius: 5px; background: var(--sage); flex-shrink:0; margin-top:1px; display:flex;align-items:center;justify-content:center; }
+  .check svg{ width:10px; height:10px; }
+  .roadmap-item.soon .check{ background: var(--paper-edge); border: 1px solid var(--line); }
+
+  .file-actions{ display:flex; flex-direction:column; gap:8px; }
+  .file-actions .btn{ width:100%; text-align:center; }
+  #fileInput{ display:none; }
+
+  .hint{ font-size: 12px; color: var(--ink-soft); line-height: 1.5; margin-top: 10px; }
+
+  @media (max-width: 980px){
+    .sidebar{ display:none; }
+    .paper{ padding: 40px 26px; }
+    .home-main{ padding: 30px 20px 60px; }
+    .home-header{ padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+  <!-- =========================================================
+       HOME VIEW — black & white document library
+       ========================================================= -->
+  <div id="homeView" class="view active">
+    <header class="home-header">
+      <div class="bw-brand">
+        <div class="bw-mark"></div>
+        <span class="bw-brand-name">Lienzo</span>
+      </div>
+      <div style="display:flex; gap:10px;">
+        <button class="bw-btn ghost" id="homeUploadBtn">Subir archivo</button>
+        <button class="bw-btn" id="homeNewBtn">Nuevo documento</button>
+      </div>
+      <input type="file" id="homeFileInput" accept=".txt,.html,.htm,.docx,.doc" multiple style="display:none;">
+    </header>
+
+    <main class="home-main">
+      <h1 class="home-title">Tus documentos</h1>
+      <p class="home-sub" id="docCountText">0 documentos guardados</p>
+      <p class="home-sub" style="margin-top:-24px;">Puedes subir archivos ya creados en .docx, .html o .txt</p>
+
+      <div class="doc-grid" id="docGrid"></div>
+    </main>
+  </div>
+
+  <!-- =========================================================
+       EDITOR VIEW — soft color writing space
+       ========================================================= -->
+  <div id="editorView" class="view">
+
+    <header class="topbar">
+      <div class="brand">
+        <button class="back-btn" id="backBtn" title="Volver a mis documentos">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="12" x2="5" y2="12"/><polyline points="12 19 5 12 12 5"/></svg>
+        </button>
+        <div class="brand-mark"></div>
+        <span class="brand-name">Lienzo</span>
+      </div>
+
+      <div class="doc-title-wrap">
+        <input id="docTitle" value="Documento sin título" spellcheck="false">
+        <span class="status" id="statusText">Guardado</span>
+      </div>
+
+      <div class="topbar-right">
+        <div class="avatars">
+          <div class="avatar a1" title="Tú">Tú</div>
+          <div class="avatar a2" title="Vale G.">VG</div>
+          <div class="avatar a3" title="Marco R.">MR</div>
+          <div class="avatar add" id="inviteBtn" title="Invitar a alguien">+</div>
+        </div>
+        <button class="btn btn-primary" id="shareBtn">Compartir</button>
+      </div>
+    </header>
+
+    <div class="layout">
+
+      <div class="paper-stage">
+
+        <div class="toolbar" id="toolbar">
+          <div class="tgroup">
+            <button class="ticon" data-cmd="undo" title="Deshacer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7v6h6"/><path d="M3 13a9 9 0 1 0 3-6.7L3 9"/></svg>
+            </button>
+            <button class="ticon" data-cmd="redo" title="Rehacer">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 7v6h-6"/><path d="M21 13a9 9 0 1 1-3-6.7L21 9"/></svg>
+            </button>
+          </div>
+
+          <div class="tdiv"></div>
+
+          <div class="tgroup">
+            <select class="tselect" id="blockType" title="Estilo de párrafo">
+              <option value="p">Texto normal</option>
+              <option value="h1">Título</option>
+              <option value="h2">Subtítulo</option>
+            </select>
+            <select class="tselect" id="fontFamily" title="Fuente">
+              <option value="Inter">Inter</option>
+              <option value="Fraunces">Fraunces</option>
+              <option value="Georgia">Georgia</option>
+              <option value="'Courier New'">Monoespaciada</option>
+            </select>
+            <select class="tselect" id="fontSize" title="Tamaño">
+              <option value="2">Pequeño</option>
+              <option value="3" selected>Normal</option>
+              <option value="5">Grande</option>
+              <option value="7">Enorme</option>
+            </select>
+          </div>
+
+          <div class="tdiv"></div>
+
+          <div class="tgroup">
+            <button class="ticon" data-cmd="bold" title="Negrita (Ctrl+B)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 4h8a4 4 0 0 1 0 8H6z"/><path d="M6 12h9a4 4 0 0 1 0 8H6z"/></svg>
+            </button>
+            <button class="ticon" data-cmd="italic" title="Cursiva (Ctrl+I)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="19" y1="4" x2="10" y2="4"/><line x1="14" y1="20" x2="5" y2="20"/><line x1="15" y1="4" x2="9" y2="20"/></svg>
+            </button>
+            <button class="ticon" data-cmd="underline" title="Subrayado (Ctrl+U)">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 3v7a6 6 0 0 0 12 0V3"/><line x1="4" y1="21" x2="20" y2="21"/></svg>
+            </button>
+          </div>
+
+          <div class="tdiv"></div>
+
+          <div class="tgroup">
+            <button class="ticon" data-cmd="justifyLeft" title="Alinear izquierda">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="4" y1="12" x2="14" y2="12"/><line x1="4" y1="18" x2="18" y2="18"/></svg>
+            </button>
+            <button class="ticon" data-cmd="justifyCenter" title="Centrar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><line x1="7" y1="12" x2="17" y2="12"/><line x1="5" y1="18" x2="19" y2="18"/></svg>
+            </button>
+            <button class="ticon" data-cmd="insertUnorderedList" title="Lista">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="6" r="1"/><circle cx="5" cy="12" r="1"/><circle cx="5" cy="18" r="1"/><line x1="9" y1="6" x2="20" y2="6"/><line x1="9" y1="12" x2="20" y2="12"/><line x1="9" y1="18" x2="20" y2="18"/></svg>
+            </button>
+          </div>
+
+          <div class="tdiv"></div>
+
+          <div class="tgroup swatches" id="colorSwatches" title="Color de texto">
+            <span class="swatch sw-ink" data-color="#37324A"></span>
+            <span class="swatch sw-sage" data-color="#7E9C7B"></span>
+            <span class="swatch sw-sky" data-color="#6FA0BB"></span>
+            <span class="swatch sw-blush" data-color="#D48F94"></span>
+            <span class="swatch sw-lav" data-color="#9C8CD4"></span>
+            <span class="swatch sw-sand" data-color="#B99356"></span>
+          </div>
+        </div>
+
+        <div class="paper" id="editor" contenteditable="true">
+          <h1>Bienvenido a Lienzo</h1>
+          <p>Esto es un espacio de escritura tranquilo. Selecciona cualquier texto y usa la barra de arriba para darle formato — nada de menús escondidos ni paneles complicados.</p>
+        </div>
+
+        <div class="paper-foot">
+          <span id="wordCount">0 palabras</span>
+          <span>Autoguardado activado</span>
+        </div>
+      </div>
+
+      <aside class="sidebar">
+        <div class="card">
+          <h3>En este documento</h3>
+          <div class="collab-row">
+            <span class="dot"></span>
+            <span class="collab-name">Tú</span>
+          </div>
+          <div class="collab-row">
+            <span class="dot"></span>
+            <span class="collab-name">Vale G.</span>
+            <span class="collab-cursor" style="background: var(--sky-deep);"></span>
+          </div>
+          <div class="collab-row">
+            <span class="dot away"></span>
+            <span class="collab-name">Marco R.</span>
+          </div>
+          <div class="hint">La edición en grupo en tiempo real está en construcción — por ahora, comparte el archivo exportado con tu equipo.</div>
+        </div>
+
+        <div class="card">
+          <h3>Archivo</h3>
+          <div class="file-actions">
+            <button class="btn btn-ghost" id="openBtn">Abrir archivo (.txt, .html, .docx)</button>
+            <input type="file" id="fileInput" accept=".txt,.html,.htm,.docx,.doc">
+            <button class="btn btn-ghost" id="exportHtml">Descargar como .html</button>
+            <button class="btn btn-ghost" id="exportTxt">Descargar como .txt</button>
+          </div>
+        </div>
+
+        <div class="card">
+          <h3>Hoja de ruta</h3>
+          <div class="roadmap-item">
+            <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>Edición simple de texto y fuentes, con colores suaves</span>
+          </div>
+          <div class="roadmap-item">
+            <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>Pantalla principal para guardar y crear documentos</span>
+          </div>
+          <div class="roadmap-item">
+            <span class="check"><svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg></span>
+            <span>Subir archivos de Word (.docx) ya creados</span>
+          </div>
+          <div class="roadmap-item soon">
+            <span class="check"></span>
+            <span>Guardar cambios de vuelta en formato .docx</span>
+          </div>
+          <div class="roadmap-item soon">
+            <span class="check"></span>
+            <span>Edición en grupo en tiempo real</span>
+          </div>
+        </div>
+      </aside>
+
+    </div>
+  </div>
+
+<script>
+  /* ============================================================
+     Almacenamiento de documentos (pantalla principal)
+     ============================================================ */
+  const STORAGE_KEY = 'lienzo-documents';
+  let currentDocId = null;
+
+  function loadDocs(){
+    try{
+      return JSON.parse(localStorage.getItem(STORAGE_KEY)) || [];
+    }catch(e){ return []; }
+  }
+
+  function saveDocs(docs){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+  }
+
+  function formatDate(ts){
+    const d = new Date(ts);
+    return d.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }) + ' · ' +
+           d.toLocaleTimeString('es-ES', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  function renderHome(){
+    const docs = loadDocs().sort((a,b) => b.updated - a.updated);
+    const grid = document.getElementById('docGrid');
+    document.getElementById('docCountText').textContent =
+      docs.length === 0 ? 'Aún no tienes documentos guardados' :
+      docs.length + (docs.length === 1 ? ' documento guardado' : ' documentos guardados');
+
+    grid.innerHTML = '';
+
+    const newCard = document.createElement('div');
+    newCard.className = 'doc-card new';
+    newCard.innerHTML = `<div class="new-icon">+</div><div class="new-label">Nuevo documento</div>`;
+    newCard.addEventListener('click', createNewDoc);
+    grid.appendChild(newCard);
+
+    docs.forEach(doc => {
+      const card = document.createElement('div');
+      card.className = 'doc-card';
+      const snippet = (doc.text || '').trim() || 'Documento vacío';
+      card.innerHTML = `
+        <button class="doc-delete" title="Eliminar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
+        <div class="doc-icon"></div>
+        <div class="doc-card-title">${escapeHtml(doc.title || 'Documento sin título')}</div>
+        <div class="doc-card-snippet">${escapeHtml(snippet)}</div>
+        <div class="doc-card-meta">
+          <span>${formatDate(doc.updated)}</span>
+          <span>${doc.words || 0} palabras</span>
+        </div>
+      `;
+      card.addEventListener('click', () => openDoc(doc.id));
+      card.querySelector('.doc-delete').addEventListener('click', (e) => {
+        e.stopPropagation();
+        deleteDoc(doc.id);
+      });
+      grid.appendChild(card);
+    });
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement('div');
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function deleteDoc(id){
+    const docs = loadDocs().filter(d => d.id !== id);
+    saveDocs(docs);
+    renderHome();
+  }
+
+  function createNewDoc(){
+    const docs = loadDocs();
+    const id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+    const doc = {
+      id,
+      title: 'Documento sin título',
+      html: '<h1>Documento sin título</h1><p>Empieza a escribir…</p>',
+      text: 'Empieza a escribir…',
+      words: 0,
+      updated: Date.now()
+    };
+    docs.push(doc);
+    saveDocs(docs);
+    openDoc(id);
+  }
+
+  function openDoc(id){
+    const docs = loadDocs();
+    const doc = docs.find(d => d.id === id);
+    if(!doc) return;
+    currentDocId = id;
+    document.getElementById('docTitle').value = doc.title;
+    document.getElementById('editor').innerHTML = doc.html;
+    document.title = doc.title + ' — Lienzo';
+    showView('editorView');
+    updateWordCount();
+  }
+
+  function persistCurrentDoc(){
+    if(!currentDocId) return;
+    const docs = loadDocs();
+    const idx = docs.findIndex(d => d.id === currentDocId);
+    if(idx === -1) return;
+    docs[idx].title = document.getElementById('docTitle').value || 'Documento sin título';
+    docs[idx].html = editor.innerHTML;
+    docs[idx].text = editor.innerText;
+    docs[idx].words = countWords(editor.innerText);
+    docs[idx].updated = Date.now();
+    saveDocs(docs);
+  }
+
+  function countWords(text){
+    const t = text.trim();
+    return t.length ? t.split(/\s+/).length : 0;
+  }
+
+  function showView(name){
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById(name).classList.add('active');
+    if(name === 'homeView') renderHome();
+  }
+
+  document.getElementById('homeNewBtn').addEventListener('click', createNewDoc);
+  document.getElementById('backBtn').addEventListener('click', () => {
+    persistCurrentDoc();
+    showView('homeView');
+  });
+
+  /* ============================================================
+     Editor
+     ============================================================ */
+  const editor = document.getElementById('editor');
+  const statusText = document.getElementById('statusText');
+  const wordCount = document.getElementById('wordCount');
+
+  function exec(cmd, value = null){
+    document.execCommand(cmd, false, value);
+    editor.focus();
+    refreshToolbarState();
+  }
+
+  document.querySelectorAll('.ticon[data-cmd]').forEach(btn => {
+    btn.addEventListener('click', () => exec(btn.dataset.cmd));
+  });
+
+  document.getElementById('blockType').addEventListener('change', e => exec('formatBlock', e.target.value));
+  document.getElementById('fontFamily').addEventListener('change', e => exec('fontName', e.target.value));
+  document.getElementById('fontSize').addEventListener('change', e => exec('fontSize', e.target.value));
+
+  document.querySelectorAll('#colorSwatches .swatch').forEach(sw => {
+    sw.addEventListener('click', () => exec('foreColor', sw.dataset.color));
+  });
+
+  function refreshToolbarState(){
+    ['bold','italic','underline'].forEach(cmd => {
+      const btn = document.querySelector(`.ticon[data-cmd="${cmd}"]`);
+      if(!btn) return;
+      try{ btn.classList.toggle('active', document.queryCommandState(cmd)); }catch(e){}
+    });
+  }
+
+  document.addEventListener('selectionchange', () => {
+    if (document.activeElement === editor || editor.contains(document.activeElement)) {
+      refreshToolbarState();
+    }
+  });
+
+  function updateWordCount(){
+    const n = countWords(editor.innerText);
+    wordCount.textContent = n + (n === 1 ? ' palabra' : ' palabras');
+  }
+
+  let saveTimer;
+  editor.addEventListener('input', () => {
+    updateWordCount();
+    statusText.textContent = 'Editando…';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      persistCurrentDoc();
+      statusText.textContent = 'Guardado';
+    }, 700);
+  });
+
+  document.getElementById('docTitle').addEventListener('input', e => {
+    document.title = e.target.value + ' — Lienzo';
+    clearTimeout(saveTimer);
+    saveTimer = setTimeout(() => {
+      persistCurrentDoc();
+      statusText.textContent = 'Guardado';
+    }, 500);
+  });
+
+  /* Export */
+  document.getElementById('exportHtml').addEventListener('click', () => {
+    const title = document.getElementById('docTitle').value || 'documento';
+    const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title></head><body>${editor.innerHTML}</body></html>`;
+    downloadBlob(html, title + '.html', 'text/html');
+  });
+
+  document.getElementById('exportTxt').addEventListener('click', () => {
+    const title = document.getElementById('docTitle').value || 'documento';
+    downloadBlob(editor.innerText, title + '.txt', 'text/plain');
+  });
+
+  function downloadBlob(content, filename, type){
+    const blob = new Blob([content], { type });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
+
+  /* ============================================================
+     Importar archivos (.txt, .html, .docx)
+     ============================================================ */
+  function nameWithoutExt(filename){
+    return filename.replace(/\.[^/.]+$/, '');
+  }
+
+  function textToHtml(text){
+    return text.split(/\n{2,}/).map(block =>
+      '<p>' + escapeHtml(block).replace(/\n/g, '<br>') + '</p>'
+    ).join('') || '<p></p>';
+  }
+
+  // Devuelve una promesa que resuelve en { title, html }
+  function importFile(file){
+    const ext = file.name.split('.').pop().toLowerCase();
+    const title = nameWithoutExt(file.name);
+
+    if(ext === 'docx'){
+      return file.arrayBuffer().then(buffer => {
+        if(typeof mammoth === 'undefined'){
+          throw new Error('No se pudo cargar el conversor de Word.');
+        }
+        return mammoth.convertToHtml({ arrayBuffer: buffer })
+          .then(result => ({ title, html: result.value || '<p></p>' }));
+      });
+    }
+
+    if(ext === 'doc'){
+      return Promise.reject(new Error('El formato .doc antiguo no es compatible todavía — guarda el archivo como .docx e inténtalo de nuevo.'));
+    }
+
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => {
+        const content = e.target.result;
+        if(ext === 'html' || ext === 'htm'){
+          const bodyMatch = content.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+          resolve({ title, html: bodyMatch ? bodyMatch[1] : content });
+        } else {
+          resolve({ title, html: textToHtml(content) });
+        }
+      };
+      reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
+      reader.readAsText(file);
+    });
+  }
+
+  /* Abrir archivo dentro del editor (reemplaza el documento actual) */
+  const fileInput = document.getElementById('fileInput');
+  document.getElementById('openBtn').addEventListener('click', () => fileInput.click());
+  fileInput.addEventListener('change', () => {
+    const file = fileInput.files[0];
+    if(!file) return;
+    statusText.textContent = 'Importando…';
+    importFile(file).then(({ title, html }) => {
+      editor.innerHTML = html;
+      document.getElementById('docTitle').value = title;
+      updateWordCount();
+      persistCurrentDoc();
+      statusText.textContent = 'Guardado';
+    }).catch(err => {
+      statusText.textContent = 'Guardado';
+      alert(err.message || 'No se pudo importar el archivo.');
+    });
+    fileInput.value = '';
+  });
+
+  /* Subir archivo(s) desde la pantalla principal — cada uno crea un documento nuevo */
+  const homeFileInput = document.getElementById('homeFileInput');
+  document.getElementById('homeUploadBtn').addEventListener('click', () => homeFileInput.click());
+  homeFileInput.addEventListener('change', () => {
+    const files = Array.from(homeFileInput.files);
+    if(!files.length) return;
+
+    const uploadBtn = document.getElementById('homeUploadBtn');
+    const originalLabel = uploadBtn.textContent;
+    uploadBtn.textContent = 'Subiendo…';
+    uploadBtn.disabled = true;
+
+    Promise.allSettled(files.map(importFile)).then(results => {
+      const docs = loadDocs();
+      let lastId = null;
+      let failed = 0;
+
+      results.forEach((res, i) => {
+        if(res.status === 'fulfilled'){
+          const { title, html } = res.value;
+          const id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = html;
+          docs.push({
+            id, title,
+            html,
+            text: tempDiv.innerText,
+            words: countWords(tempDiv.innerText),
+            updated: Date.now() + i
+          });
+          lastId = id;
+        } else {
+          failed++;
+        }
+      });
+
+      saveDocs(docs);
+      uploadBtn.textContent = originalLabel;
+      uploadBtn.disabled = false;
+      homeFileInput.value = '';
+
+      if(failed > 0){
+        alert(failed === 1
+          ? 'No se pudo importar uno de los archivos.'
+          : 'No se pudieron importar ' + failed + ' archivos.');
+      }
+
+      if(lastId){
+        openDoc(lastId);
+      } else {
+        renderHome();
+      }
+    });
+  });
+
+  /* Share (mock link copy) */
+  document.getElementById('shareBtn').addEventListener('click', () => {
+    const link = location.href.split('#')[0] + '#' + (currentDocId || 'doc');
+    navigator.clipboard?.writeText(link).catch(()=>{});
+    const btn = document.getElementById('shareBtn');
+    const original = btn.textContent;
+    btn.textContent = 'Enlace copiado';
+    setTimeout(() => btn.textContent = original, 1600);
+  });
+
+  document.getElementById('inviteBtn').addEventListener('click', () => {
+    document.getElementById('shareBtn').click();
+  });
+
+  /* Init */
+  renderHome();
+</script>
+
+</body>
+</html>
