@@ -784,6 +784,11 @@
   // 'fidelity' -> hojas renderizadas con docx-preview, tal como se ven en Word
   let currentDocMode = 'flow';
   let currentFidelityCss = '';
+  // Clase del contenedor ".docx-wrapper" que genera docx-preview: hay reglas CSS
+  // del propio documento (posiciones en % de imágenes flotantes, etc.) que solo
+  // aplican si la hoja sigue viviendo dentro de ese contenedor, así que se
+  // preserva y se vuelve a envolver cada hoja con ella al mostrarla.
+  let currentFidelityWrapperClass = 'docx-wrapper';
 
   function loadDocs(){
     try{
@@ -886,6 +891,7 @@
     document.title = doc.title + ' — Lienzo';
     if(currentDocMode === 'fidelity'){
       currentFidelityCss = doc.css || '';
+      currentFidelityWrapperClass = doc.wrapperClass || 'docx-wrapper';
       renderFidelityPages(doc.pages && doc.pages.length ? doc.pages : []);
     } else {
       renderPages(doc.pages && doc.pages.length ? doc.pages : ['<p></p>']);
@@ -910,6 +916,7 @@
         html: p.innerHTML
       }));
       docs[idx].css = currentFidelityCss;
+      docs[idx].wrapperClass = currentFidelityWrapperClass;
     } else {
       docs[idx].pages = getAllPagesHtml();
     }
@@ -1021,6 +1028,55 @@
     });
   }
 
+  // Tablas tipo "lista de verificación" (columnas CUMPLE / NO CUMPLE, SÍ / NO,
+  // CONFORME, etc.): a veces la celda no trae ningún glifo de casilla, está
+  // simplemente vacía a la espera de que alguien la marque a mano. Se detecta
+  // la columna por su encabezado y se le añade una casilla real a cada celda.
+  const CHECKBOX_COLUMN_HEADERS = /^(cumple|nocumple|si|no|conforme|noconforme|cumplimiento|verificado|marcar|marca|check)$/;
+
+  function normalizeHeaderText(text){
+    return (text || '')
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // quita acentos
+      .replace(/[^a-zA-Z]/g, '') // quita espacios, guiones de corte de línea, etc.
+      .toLowerCase();
+  }
+
+  function enhanceEvidenceTables(root){
+    if(!root) return;
+    root.querySelectorAll('table').forEach(table => {
+      const rows = Array.from(table.rows || []);
+      if(rows.length < 2) return;
+      const headerCells = Array.from(rows[0].cells || []);
+      const dataRows = rows.slice(1);
+      const checkboxCols = [];
+      headerCells.forEach((cell, i) => {
+        const norm = normalizeHeaderText(cell.textContent);
+        if(!CHECKBOX_COLUMN_HEADERS.test(norm)) return;
+        // "cumple"/"conforme" son encabezados inequívocos de checklist. Para
+        // encabezados más ambiguos como "sí"/"no" (que también podrían ser una
+        // columna de numeración tipo "N°"), solo se aplican si la columna está
+        // mayormente vacía, como corresponde a una casilla por marcar.
+        const unambiguous = /cumple|conforme/.test(norm);
+        const emptyCount = dataRows.filter(r => {
+          const c = r.cells[i];
+          return c && !c.textContent.trim();
+        }).length;
+        const mostlyEmpty = dataRows.length > 0 && (emptyCount / dataRows.length) >= 0.6;
+        if(unambiguous || mostlyEmpty) checkboxCols.push(i);
+      });
+      if(!checkboxCols.length) return;
+      dataRows.forEach(row => {
+        const cells = Array.from(row.cells || []);
+        checkboxCols.forEach(i => {
+          const cell = cells[i];
+          if(!cell || cell.querySelector('.lienzo-checkbox')) return;
+          if(!cell.textContent.trim()) cell.style.textAlign = cell.style.textAlign || 'center';
+          cell.appendChild(makeCheckboxEl());
+        });
+      });
+    });
+  }
+
   function attachPageListeners(page){
     page.addEventListener('input', () => onAnyPageInput());
     page.addEventListener('focus', refreshToolbarState);
@@ -1039,6 +1095,7 @@
       }
     });
     enhanceCheckboxes(page);
+    enhanceEvidenceTables(page);
   }
 
   function renderPages(pagesHtmlArray){
@@ -1078,13 +1135,20 @@
     hint.textContent = 'Vista fiel al Word original (imágenes, colores y formas incluidos). Puedes editar el texto de cada hoja, pero aquí no se reparte solo entre hojas como en un documento nuevo de Lienzo.';
     pagesWrapper.appendChild(hint);
     pagesData.forEach(p => {
+      // Cada hoja se envuelve en un contenedor con la clase real de docx-preview
+      // ("docx-wrapper" o la que sea): el CSS propio del documento a veces
+      // posiciona imágenes/figuras en % relativo a ese contenedor, así que sin
+      // él las figuras flotantes de portadas o encabezados quedan mal ubicadas.
+      const shell = document.createElement('div');
+      shell.className = currentFidelityWrapperClass || 'docx-wrapper';
       const page = document.createElement('div');
       page.className = (p.docClass || 'docx') + ' docx-page sheet';
       if(p.style) page.setAttribute('style', p.style);
       page.contentEditable = 'true';
       page.innerHTML = p.html || '';
       attachPageListeners(page);
-      pagesWrapper.appendChild(page);
+      shell.appendChild(page);
+      pagesWrapper.appendChild(shell);
     });
     updatePageCountFoot();
   }
@@ -1409,7 +1473,7 @@
       const pagesHtml = getPages().map(p =>
         `<section class="${stripUtilityClasses(p.className)}" style="${p.getAttribute('style') || ''} margin:0 auto 40px;">${p.innerHTML}</section>`
       ).join('');
-      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title><style>${currentFidelityCss}</style></head><body>${pagesHtml}</body></html>`;
+      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title><style>${currentFidelityCss}</style></head><body><div class="${currentFidelityWrapperClass || 'docx-wrapper'}">${pagesHtml}</div></body></html>`;
       downloadBlob(html, title + '.html', 'text/html');
       return;
     }
@@ -1476,6 +1540,11 @@
           .map(s => s.textContent).join('\n');
 
         const wrapper = renderContainer.querySelector('.docx-wrapper') || renderContainer;
+        // Se guarda la clase real del wrapper que generó docx-preview: el CSS del
+        // propio documento suele tener reglas que dependen de ese contenedor
+        // (por ejemplo posiciones en % de imágenes o figuras flotantes de la
+        // portada), y si se pierde esa referencia esas figuras se desordenan.
+        const wrapperClass = wrapper.className || 'docx-wrapper';
         let pageEls = Array.from(wrapper.children).filter(el => el.classList.contains('docx'));
         if(!pageEls.length) pageEls = Array.from(wrapper.children);
 
@@ -1494,7 +1563,7 @@
           throw new Error('No se pudo generar la vista del documento.');
         }
 
-        return { title, mode: 'fidelity', css: cssText, pages, text };
+        return { title, mode: 'fidelity', css: cssText, pages, text, wrapperClass };
       }).catch(err => {
         renderContainer.remove();
         styleContainer.remove();
@@ -1567,6 +1636,7 @@
       if(result.mode === 'fidelity'){
         currentDocMode = 'fidelity';
         currentFidelityCss = result.css || '';
+        currentFidelityWrapperClass = result.wrapperClass || 'docx-wrapper';
         renderFidelityPages(result.pages);
       } else {
         currentDocMode = 'flow';
@@ -1614,6 +1684,7 @@
               mode: 'fidelity',
               pages: result.pages,
               css: result.css,
+              wrapperClass: result.wrapperClass || 'docx-wrapper',
               text: result.text,
               words: countWords(result.text),
               updated: Date.now() + i
