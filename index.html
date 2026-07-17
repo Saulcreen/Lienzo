@@ -7,7 +7,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.11.0/mammoth.browser.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/docx-preview@0.4.0/dist/docx-preview.min.js"></script>
 <style>
   :root{
     /* editor (color) tokens */
@@ -424,6 +425,29 @@
   .page table{ max-width:100%; border-collapse: collapse; }
   .page:focus-visible{ box-shadow: var(--shadow-paper), 0 0 0 3px rgba(175,203,221,0.6); }
 
+  /* Hojas en modo "vista fiel" (documentos .docx renderizados con docx-preview).
+     No usan las medidas fijas de .page: cada hoja respeta el tamaño real
+     del documento original. */
+  .docx-page{
+    background: #fff;
+    box-shadow: var(--shadow-paper);
+    border-radius: 4px;
+    outline: none;
+    overflow: hidden;
+  }
+  .docx-page:focus-visible{ box-shadow: var(--shadow-paper), 0 0 0 3px rgba(175,203,221,0.6); }
+  .fidelity-hint{
+    max-width: 794px;
+    margin: 0 auto 14px;
+    font-size: 12px;
+    color: var(--ink-soft);
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+
   .zoom-controls{
     position: sticky;
     top: 12px;
@@ -714,6 +738,10 @@
      ============================================================ */
   const STORAGE_KEY = 'lienzo-documents';
   let currentDocId = null;
+  // 'flow'     -> hojas propias del editor, con reflujo automático (texto, .html, .txt)
+  // 'fidelity' -> hojas renderizadas con docx-preview, tal como se ven en Word
+  let currentDocMode = 'flow';
+  let currentFidelityCss = '';
 
   function loadDocs(){
     try{
@@ -724,7 +752,11 @@
   }
 
   function saveDocs(docs){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+    try{
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(docs));
+    }catch(e){
+      alert('No se pudo guardar: este documento pesa demasiado para el almacenamiento del navegador (suele pasar con .docx que traen muchas imágenes). Prueba exportarlo o usa un archivo más liviano.');
+    }
   }
 
   function formatDate(ts){
@@ -791,6 +823,7 @@
     const doc = {
       id,
       title: 'Documento sin título',
+      mode: 'flow',
       pages: ['<h1>Documento sin título</h1><p>Empieza a escribir…</p>'],
       text: 'Empieza a escribir…',
       words: 0,
@@ -806,9 +839,15 @@
     const doc = docs.find(d => d.id === id);
     if(!doc) return;
     currentDocId = id;
+    currentDocMode = doc.mode === 'fidelity' ? 'fidelity' : 'flow';
     document.getElementById('docTitle').value = doc.title;
     document.title = doc.title + ' — Lienzo';
-    renderPages(doc.pages && doc.pages.length ? doc.pages : ['<p></p>']);
+    if(currentDocMode === 'fidelity'){
+      currentFidelityCss = doc.css || '';
+      renderFidelityPages(doc.pages && doc.pages.length ? doc.pages : []);
+    } else {
+      renderPages(doc.pages && doc.pages.length ? doc.pages : ['<p></p>']);
+    }
     showView('editorView');
     setZoom(1);
     updateWordCount();
@@ -821,7 +860,13 @@
     if(idx === -1) return;
     const combinedText = getAllPagesText();
     docs[idx].title = document.getElementById('docTitle').value || 'Documento sin título';
-    docs[idx].pages = getAllPagesHtml();
+    docs[idx].mode = currentDocMode;
+    if(currentDocMode === 'fidelity'){
+      docs[idx].pages = getPages().map(p => ({ style: p.getAttribute('style') || '', html: p.innerHTML }));
+      docs[idx].css = currentFidelityCss;
+    } else {
+      docs[idx].pages = getAllPagesHtml();
+    }
     docs[idx].text = combinedText;
     docs[idx].words = countWords(combinedText);
     docs[idx].updated = Date.now();
@@ -854,12 +899,12 @@
   const pageCountFoot = document.getElementById('pageCountFoot');
 
   function getPages(){
-    return Array.from(pagesWrapper.querySelectorAll('.page'));
+    return Array.from(pagesWrapper.querySelectorAll('.sheet'));
   }
 
   function createPageEl(html){
     const page = document.createElement('div');
-    page.className = 'page';
+    page.className = 'page sheet';
     page.contentEditable = 'true';
     page.innerHTML = html || '<p><br></p>';
     attachPageListeners(page);
@@ -872,10 +917,43 @@
   }
 
   function renderPages(pagesHtmlArray){
+    pagesWrapper.classList.remove('fidelity-mode');
     pagesWrapper.innerHTML = '';
     pagesHtmlArray.forEach(html => pagesWrapper.appendChild(createPageEl(html)));
     // corrige cualquier desbordamiento heredado (por ejemplo, contenido importado)
     reflowFrom(0);
+    updatePageCountFoot();
+  }
+
+  function injectFidelityCss(cssText){
+    let styleTag = document.getElementById('fidelityDocStyle');
+    if(!styleTag){
+      styleTag = document.createElement('style');
+      styleTag.id = 'fidelityDocStyle';
+      document.head.appendChild(styleTag);
+    }
+    styleTag.textContent = cssText || '';
+  }
+
+  // Muestra las hojas tal como las generó docx-preview: sin reflujo propio,
+  // cada hoja conserva su tamaño y contenido real (imágenes, colores, tablas).
+  function renderFidelityPages(pagesData){
+    injectFidelityCss(currentFidelityCss);
+    pagesWrapper.classList.add('fidelity-mode');
+    pagesWrapper.innerHTML = '';
+    const hint = document.createElement('div');
+    hint.className = 'fidelity-hint';
+    hint.textContent = 'Vista fiel al Word original (imágenes, colores y formas incluidos). Puedes editar el texto de cada hoja, pero aquí no se reparte solo entre hojas como en un documento nuevo de Lienzo.';
+    pagesWrapper.appendChild(hint);
+    pagesData.forEach(p => {
+      const page = document.createElement('div');
+      page.className = 'docx-page sheet';
+      if(p.style) page.setAttribute('style', p.style);
+      page.contentEditable = 'true';
+      page.innerHTML = p.html || '';
+      attachPageListeners(page);
+      pagesWrapper.appendChild(page);
+    });
     updatePageCountFoot();
   }
 
@@ -1075,10 +1153,12 @@
   }
 
   function onAnyPageInput(){
-    const active = document.activeElement;
-    const pages = getPages();
-    const idx = pages.indexOf(active);
-    reflowFrom(idx === -1 ? 0 : idx);
+    if(currentDocMode === 'flow'){
+      const active = document.activeElement;
+      const pages = getPages();
+      const idx = pages.indexOf(active);
+      reflowFrom(idx === -1 ? 0 : idx);
+    }
     updateWordCount();
     statusText.textContent = 'Editando…';
     clearTimeout(saveTimer);
@@ -1125,7 +1205,7 @@
      ============================================================ */
   function exec(cmd, value = null){
     document.execCommand(cmd, false, value);
-    if(document.activeElement && document.activeElement.classList.contains('page')){
+    if(document.activeElement && document.activeElement.classList.contains('sheet')){
       document.activeElement.focus();
     }
     refreshToolbarState();
@@ -1152,7 +1232,7 @@
   }
 
   document.addEventListener('selectionchange', () => {
-    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('page')) {
+    if (document.activeElement && document.activeElement.classList && document.activeElement.classList.contains('sheet')) {
       refreshToolbarState();
     }
   });
@@ -1176,6 +1256,14 @@
   /* Export */
   document.getElementById('exportHtml').addEventListener('click', () => {
     const title = document.getElementById('docTitle').value || 'documento';
+    if(currentDocMode === 'fidelity'){
+      const pagesHtml = getPages().map(p =>
+        `<section style="${p.getAttribute('style') || ''} margin:0 auto 40px;">${p.innerHTML}</section>`
+      ).join('');
+      const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title><style>${currentFidelityCss}</style></head><body>${pagesHtml}</body></html>`;
+      downloadBlob(html, title + '.html', 'text/html');
+      return;
+    }
     const pagesHtml = getAllPagesHtml().map(h => `<section style="max-width:700px;margin:0 auto 60px;">${h}</section>`).join('');
     const html = `<!DOCTYPE html><html lang="es"><head><meta charset="UTF-8"><title>${title}</title></head><body>${pagesHtml}</body></html>`;
     downloadBlob(html, title + '.html', 'text/html');
@@ -1209,19 +1297,69 @@
     ).join('') || '<p></p>';
   }
 
-  // Devuelve una promesa que resuelve en { title, html }
+  // Renderiza un .docx con docx-preview: mantiene imágenes, colores, tablas,
+  // formas y la paginación real del documento — no solo el texto plano.
+  function importDocxFidelity(file){
+    const title = nameWithoutExt(file.name);
+    if(typeof docx === 'undefined' || typeof docx.renderAsync !== 'function'){
+      return Promise.reject(new Error('No se pudo cargar el visor fiel de Word.'));
+    }
+
+    return file.arrayBuffer().then(buffer => {
+      // Se renderiza en un contenedor real (no display:none) pero fuera de
+      // pantalla, porque docx-preview necesita medir el layout de verdad.
+      const renderContainer = document.createElement('div');
+      renderContainer.style.cssText = 'position:fixed; left:-99999px; top:0;';
+      const styleContainer = document.createElement('div');
+      styleContainer.style.display = 'none';
+      document.body.appendChild(renderContainer);
+      document.body.appendChild(styleContainer);
+
+      return docx.renderAsync(buffer, renderContainer, styleContainer, {
+        className: 'docx',
+        inWrapper: true,
+        breakPages: true,
+        ignoreLastRenderedPageBreak: true,
+        useBase64URL: true,
+        ignoreFonts: true // evita incrustar fuentes completas (pesarían demasiado para localStorage)
+      }).then(() => {
+        const cssText = Array.from(styleContainer.querySelectorAll('style'))
+          .map(s => s.textContent).join('\n');
+
+        const wrapper = renderContainer.querySelector('.docx-wrapper') || renderContainer;
+        let pageEls = Array.from(wrapper.children).filter(el => el.classList.contains('docx'));
+        if(!pageEls.length) pageEls = Array.from(wrapper.children);
+
+        const pages = pageEls.map(sec => ({
+          style: sec.getAttribute('style') || '',
+          html: sec.innerHTML
+        }));
+
+        const text = renderContainer.innerText || '';
+
+        renderContainer.remove();
+        styleContainer.remove();
+
+        if(!pages.length){
+          throw new Error('No se pudo generar la vista del documento.');
+        }
+
+        return { title, mode: 'fidelity', css: cssText, pages, text };
+      }).catch(err => {
+        renderContainer.remove();
+        styleContainer.remove();
+        throw err;
+      });
+    });
+  }
+
+  // Devuelve una promesa que resuelve en { title, mode:'flow', html } o { title, mode:'fidelity', pages, css, text }
   function importFile(file){
     const ext = file.name.split('.').pop().toLowerCase();
     const title = nameWithoutExt(file.name);
 
     if(ext === 'docx'){
-      return file.arrayBuffer().then(buffer => {
-        if(typeof mammoth === 'undefined'){
-          throw new Error('No se pudo cargar el conversor de Word.');
-        }
-        return mammoth.convertToHtml({ arrayBuffer: buffer })
-          .then(result => ({ title, html: result.value || '<p></p>' }));
-      });
+      return importDocxFidelity(file);
     }
 
     if(ext === 'doc'){
@@ -1234,9 +1372,9 @@
         const content = e.target.result;
         if(ext === 'html' || ext === 'htm'){
           const bodyMatch = content.match(/<body[^>]*>([\s\S]*)<\/body>/i);
-          resolve({ title, html: bodyMatch ? bodyMatch[1] : content });
+          resolve({ title, mode: 'flow', html: bodyMatch ? bodyMatch[1] : content });
         } else {
-          resolve({ title, html: textToHtml(content) });
+          resolve({ title, mode: 'flow', html: textToHtml(content) });
         }
       };
       reader.onerror = () => reject(new Error('No se pudo leer el archivo.'));
@@ -1250,6 +1388,24 @@
     return getAllPagesHtml();
   }
 
+  // Ejecuta fn con #editorView realmente en el layout (no display:none) pero
+  // fuera de la pantalla, para que las mediciones de altura de las hojas
+  // (reflowFrom) funcionen aunque el usuario siga en la pantalla principal.
+  function withEditorMeasuring(fn){
+    const editorView = document.getElementById('editorView');
+    const wasActive = editorView.classList.contains('active');
+    if(!wasActive){
+      editorView.style.cssText = 'display:block; position:fixed; left:-99999px; top:0;';
+    }
+    try{
+      return fn();
+    } finally {
+      if(!wasActive){
+        editorView.style.cssText = '';
+      }
+    }
+  }
+
   /* Abrir archivo dentro del editor (reemplaza el documento actual, dividido en hojas) */
   const fileInput = document.getElementById('fileInput');
   document.getElementById('openBtn').addEventListener('click', () => fileInput.click());
@@ -1257,9 +1413,16 @@
     const file = fileInput.files[0];
     if(!file) return;
     statusText.textContent = 'Importando…';
-    importFile(file).then(({ title, html }) => {
-      splitHtmlIntoPages(html);
-      document.getElementById('docTitle').value = title;
+    importFile(file).then(result => {
+      if(result.mode === 'fidelity'){
+        currentDocMode = 'fidelity';
+        currentFidelityCss = result.css || '';
+        renderFidelityPages(result.pages);
+      } else {
+        currentDocMode = 'flow';
+        splitHtmlIntoPages(result.html);
+      }
+      document.getElementById('docTitle').value = result.title;
       updateWordCount();
       persistCurrentDoc();
       const n = getPages().length;
@@ -1289,23 +1452,36 @@
       let lastId = null;
       let failed = 0;
 
-      results.forEach((res, i) => {
-        if(res.status === 'fulfilled'){
-          const { title, html } = res.value;
-          const pagesHtml = splitHtmlIntoPages(html);
+      withEditorMeasuring(() => {
+        results.forEach((res, i) => {
+          if(res.status !== 'fulfilled'){ failed++; return; }
+          const result = res.value;
           const id = 'doc-' + Date.now() + '-' + Math.random().toString(36).slice(2,7);
-          const fullText = getAllPagesText();
-          docs.push({
-            id, title,
-            pages: pagesHtml,
-            text: fullText,
-            words: countWords(fullText),
-            updated: Date.now() + i
-          });
+
+          if(result.mode === 'fidelity'){
+            docs.push({
+              id, title: result.title,
+              mode: 'fidelity',
+              pages: result.pages,
+              css: result.css,
+              text: result.text,
+              words: countWords(result.text),
+              updated: Date.now() + i
+            });
+          } else {
+            const pagesHtml = splitHtmlIntoPages(result.html);
+            const fullText = getAllPagesText();
+            docs.push({
+              id, title: result.title,
+              mode: 'flow',
+              pages: pagesHtml,
+              text: fullText,
+              words: countWords(fullText),
+              updated: Date.now() + i
+            });
+          }
           lastId = id;
-        } else {
-          failed++;
-        }
+        });
       });
 
       saveDocs(docs);
