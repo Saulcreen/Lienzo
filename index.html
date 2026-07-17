@@ -236,6 +236,45 @@
   .empty-state .home-title{ font-size:20px; margin-bottom:8px; }
 
   /* =========================================================
+     CASILLAS INTERACTIVAS (checkboxes)
+     Sustituyen los glifos tipo Wingdings/Webdings o símbolos
+     Unicode de casilla (☐ □ etc.) que trae el Word importado,
+     por una casilla real que se puede marcar con un clic.
+     ========================================================= */
+  .lienzo-checkbox{
+    display:inline-block;
+    width:15px; height:15px;
+    min-width:15px;
+    box-sizing:border-box;
+    border:1.5px solid var(--ink-soft);
+    border-radius:3px;
+    vertical-align:middle;
+    margin:0 3px;
+    cursor:pointer;
+    position:relative;
+    background:#fff;
+    transition: background .12s ease, border-color .12s ease;
+  }
+  .lienzo-checkbox:hover{ border-color: var(--ink); }
+  .lienzo-checkbox[data-checked="true"]{
+    background: var(--sage-deep);
+    border-color: var(--sage-deep);
+  }
+  .lienzo-checkbox[data-checked="true"]::after{
+    content:"";
+    position:absolute;
+    left:4px; top:1px;
+    width:4px; height:8px;
+    border-right:2px solid #fff;
+    border-bottom:2px solid #fff;
+    transform: rotate(38deg);
+  }
+  .lienzo-checkbox:focus-visible{
+    outline: 2px solid var(--sky-deep);
+    outline-offset: 2px;
+  }
+
+  /* =========================================================
      EDITOR VIEW — soft color
      ========================================================= */
   #editorView{
@@ -918,9 +957,88 @@
     return page;
   }
 
+  /* ============================================================
+     Casillas interactivas — detecta símbolos de checkbox que traen
+     los documentos importados (Wingdings/Webdings, o Unicode tipo
+     ☐ □ ▢) y los reemplaza por una casilla real que se puede marcar.
+     ============================================================ */
+  const CHECKBOX_GLYPHS = /^[\u2610\u2611\u2612\u25A0\u25A1\u25AA\u25AB\u25FB\u25FC\u25FD\u25FE\u2B1B\u2B1C\u2751\u2752]$/;
+
+  function looksLikeCheckboxFont(el){
+    if(!el || el.nodeType !== 1) return false;
+    const inline = el.getAttribute('style') || '';
+    if(/wingdings|webdings|marlett/i.test(inline)) return true;
+    try{
+      return /wingdings|webdings|marlett/i.test(getComputedStyle(el).fontFamily || '');
+    } catch(e){ return false; }
+  }
+
+  function makeCheckboxEl(){
+    const box = document.createElement('span');
+    box.className = 'lienzo-checkbox';
+    box.contentEditable = 'false';
+    box.setAttribute('role', 'checkbox');
+    box.setAttribute('tabindex', '0');
+    box.dataset.checked = 'false';
+    box.setAttribute('aria-checked', 'false');
+    return box;
+  }
+
+  function toggleCheckbox(box){
+    const checked = box.dataset.checked === 'true';
+    box.dataset.checked = checked ? 'false' : 'true';
+    box.setAttribute('aria-checked', checked ? 'false' : 'true');
+    onAnyPageInput();
+  }
+
+  // Recorre el contenido recién importado buscando un carácter suelto que
+  // sea un símbolo de casilla (por Unicode o porque su fuente es de tipo
+  // símbolo) y lo sustituye por una casilla real clicable.
+  function enhanceCheckboxes(root){
+    if(!root) return;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const targets = [];
+    let node;
+    while((node = walker.nextNode())){
+      const trimmed = (node.nodeValue || '').trim();
+      if(trimmed.length !== 1) continue;
+      if(CHECKBOX_GLYPHS.test(trimmed) || looksLikeCheckboxFont(node.parentElement)){
+        targets.push(node);
+      }
+    }
+    targets.forEach(node => {
+      const parent = node.parentElement;
+      const box = makeCheckboxEl();
+      // Si el nodo padre es un span/run que solo contenía este carácter,
+      // se reemplaza el padre completo para no arrastrar el font-family
+      // "Wingdings" que deja el cuadro roto o invisible.
+      if(parent && parent !== root && parent.childNodes.length === 1 &&
+         !['TD','TH','P','LI','DIV','TR','TABLE'].includes(parent.tagName)){
+        parent.parentNode.replaceChild(box, parent);
+      } else {
+        node.parentNode.replaceChild(box, node);
+      }
+    });
+  }
+
   function attachPageListeners(page){
     page.addEventListener('input', () => onAnyPageInput());
     page.addEventListener('focus', refreshToolbarState);
+    page.addEventListener('click', (e) => {
+      const box = e.target.closest && e.target.closest('.lienzo-checkbox');
+      if(box && page.contains(box)){
+        e.preventDefault();
+        toggleCheckbox(box);
+      }
+    });
+    page.addEventListener('keydown', (e) => {
+      const box = e.target.closest && e.target.closest('.lienzo-checkbox');
+      if(box && (e.key === ' ' || e.key === 'Enter')){
+        e.preventDefault();
+        toggleCheckbox(box);
+      }
+    });
+    enhanceCheckboxes(page);
   }
 
   function renderPages(pagesHtmlArray){
